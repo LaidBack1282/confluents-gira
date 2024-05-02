@@ -2,7 +2,7 @@ import groovy.json.JsonSlurper
 import groovy.json.JsonOutput
 
 def domain = "ddovguchev.atlassian.net"
-def username = "ddovguchev@gmail.com"
+def username = "ddovguchev@gmail.com" // username и api_token опциональны, данные поддтягиваются с vault
 def api_token = <TOKEN>
 def pageId = "2392065"
 
