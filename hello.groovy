@@ -1,4 +1,5 @@
 import groovy.json.JsonSlurper
+import groovy.json.JsonOutput
 
 def domain = "ddovguchev.atlassian.net"
 def username = "ddovguchev@gmail.com"
@@ -36,30 +37,44 @@ class ConfluenceClient {
     void addPageContent(String pageId, String newContent) {
         def pageResponse = getPageContent(pageId)
         if (pageResponse.startsWith("Error:")) {
-            println pageResponse // Вывод ошибки, если не удалось получить содержимое страницы
+            println pageResponse
             return
         }
 
-        def parser = new JsonSlurper()
-        def pageJson = parser.parseText(pageResponse)
-        int currentVersion = pageJson.version.number
+        def connection = new URL("https://${domain}/wiki/rest/api/content/${pageId}?expand=version").openConnection()
+        connection.setRequestMethod('GET')
+        connection.setRequestProperty('Accept', 'application/json')
+        connection.setDoOutput(true)
+        String userpass = username + ":" + apiToken
+        String basicAuth = "Basic " + userpass.bytes.encodeBase64().toString()
+        connection.setRequestProperty('Authorization', basicAuth)
 
-        def connection = new URL("https://${domain}/wiki/rest/api/content/${pageId}").openConnection()
+        def currentVersion
+        if (connection.responseCode == 200) {
+            def parser = new JsonSlurper()
+            def response = parser.parse(connection.inputStream)
+            currentVersion = response.version.number
+        } else {
+            println "Ошибка при получении версии страницы: ${connection.responseCode}"
+            return
+        }
+
+        connection = new URL("https://${domain}/wiki/rest/api/content/${pageId}").openConnection()
         try {
             connection.setRequestMethod('PUT')
             connection.setRequestProperty('Accept', 'application/json')
             connection.setRequestProperty('Content-Type', 'application/json')
             connection.setDoOutput(true)
-            String userpass = username + ":" + apiToken
-            String basicAuth = "Basic " + userpass.bytes.encodeBase64().toString()
+            userpass = username + ":" + apiToken
+            basicAuth = "Basic " + userpass.bytes.encodeBase64().toString()
             connection.setRequestProperty('Authorization', basicAuth)
 
-            def updatedContent = pageJson.body.storage.value + newContent // Добавление нового содержимого
+            def updatedContent = pageResponse + newContent
 
             def jsonBody = [
                 id: pageId,
                 type: "page",
-                title: pageJson.title,
+//                title: "TEST",
                 body: [
                     storage: [
                         value: updatedContent,
@@ -73,7 +88,7 @@ class ConfluenceClient {
             ]
 
             def writer = new OutputStreamWriter(connection.outputStream)
-            writer.write(jsonBody.toString())
+            writer.write(JsonOutput.toJson(jsonBody))
             writer.flush()
             writer.close()
 
@@ -82,13 +97,14 @@ class ConfluenceClient {
             } else {
                 println "Ошибка при обновлении содержимого страницы: ${connection.responseCode}"
             }
+        } catch (Exception e) {
+            println "Произошла ошибка: ${e.message}"
         } finally {
-            connection.disconnect() // Закрытие соединения
+            connection.disconnect()
         }
     }
-
 }
 
 def client = new ConfluenceClient(domain, username, api_token)
-//println client.getPageContent('1835012')
+println client.getPageContent('1835012')
 println client.addPageContent('1835012', '<p>new line</p>')
